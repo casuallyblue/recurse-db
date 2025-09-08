@@ -17,12 +17,33 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8000").await.unwrap();
 
-    axum::serve(listener, db).await.unwrap();
+    axum::serve(listener, db)
+        .with_graceful_shutdown(shutdown_signal())
+        .await.unwrap();
+
+
+    println!("server stopped");
 }
 
-async fn get(Query(params): Query<HashMap<String, String>>, State(db_state): State<Arc<Mutex<DBState>>>) -> Result<String, StatusCode> {
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    tokio::select! {
+        _ = ctrl_c => {},
+    }
+}
+
+async fn get(
+    Query(params): Query<HashMap<String, String>>, 
+    State(db_state): State<Arc<Mutex<DBState>>>) -> Result<String, StatusCode> {
+
     if let Some(key_name) = params.get("key") {
         let db_state = db_state.lock().unwrap();
+
         if let Some(key_value) = db_state.kv_store.get(key_name) {
             return Ok(key_value.clone());
         }
@@ -31,7 +52,10 @@ async fn get(Query(params): Query<HashMap<String, String>>, State(db_state): Sta
     Err(StatusCode::NOT_FOUND)
 }
 
-async fn set(Query(params): Query<HashMap<String, String>>, State(db_state): State<Arc<Mutex<DBState>>>) -> StatusCode {
+async fn set(
+    Query(params): Query<HashMap<String, String>>, 
+    State(db_state): State<Arc<Mutex<DBState>>>) -> StatusCode {
+
     if params.len() != 1 {
         return StatusCode::INTERNAL_SERVER_ERROR;
     }
@@ -42,5 +66,9 @@ async fn set(Query(params): Query<HashMap<String, String>>, State(db_state): Sta
         return StatusCode::OK;
     }
 
+    // The for loop will execute which returns
+    // since we already checked that the number of
+    // query parameters is exactly 1 we will always
+    // loop exactly once and return from the function
     unreachable!("should not be possible to get here");
 }
