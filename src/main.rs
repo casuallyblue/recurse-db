@@ -73,9 +73,9 @@ async fn set(
         return StatusCode::OK;
     }
 
-    // The for loop will execute which returns
-    // since we already checked that the number of
-    // query parameters is exactly 1 we will always
-    // loop exactly once and return from the function
+    // The for loop will execute exactly once since
+    // we checked that the number of query parameters
+    // was equal to one. Since it returns there, it
+    // should be impossible to reach this point.
     unreachable!("should not be possible to get here");
 }
