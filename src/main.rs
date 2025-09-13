@@ -58,10 +58,7 @@ async fn main() {
     let mut storage_file = File::create("db.dat.new").unwrap();
 
     for (key, value) in db_state.kv_store.iter() {
-        storage_file.write(key.as_bytes()).unwrap();
-        storage_file.write(&[30]).unwrap();
-        storage_file.write(value.as_bytes()).unwrap();
-        storage_file.write("\n".as_bytes()).unwrap();
+        write_record(&mut storage_file, key, value);
     }
 
     drop(storage_file);
@@ -101,6 +98,13 @@ async fn get(
     Err(StatusCode::NOT_FOUND)
 }
 
+fn write_record(file: &mut File, key: &String, value: &String) {
+    file.write(key.as_bytes()).unwrap();
+    file.write(&[30]).unwrap();
+    file.write(value.as_bytes()).unwrap();
+    file.write("\n".as_bytes()).unwrap();
+}
+
 async fn set(
     Query(params): Query<HashMap<String, String>>,
     State(db_state): State<Arc<Mutex<DBState>>>,
@@ -113,10 +117,7 @@ async fn set(
         let mut db_state = db_state.lock().unwrap();
         db_state.kv_store.insert(key.clone(), value.clone());
 
-        db_state.storage.write(key.as_bytes()).unwrap();
-        db_state.storage.write(&[30]).unwrap();
-        db_state.storage.write(value.as_bytes()).unwrap();
-        db_state.storage.write("\n".as_bytes()).unwrap();
+        write_record(&mut db_state.storage, &key, &value);
 
         return StatusCode::OK;
     }
