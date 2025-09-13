@@ -4,8 +4,8 @@ use axum::{
     http::StatusCode,
     routing,
 };
-use std::sync::Mutex;
-use std::{collections::HashMap, fs::File, path::Path};
+use std::{collections::HashMap, fs::File, io::BufRead, path::Path};
+use std::{io::BufReader, sync::Mutex};
 use std::{io::Write, sync::Arc};
 
 struct DBState {
@@ -24,15 +24,27 @@ async fn main() {
         .open(storage_path)
         .unwrap();
 
-    let db_state = Arc::new(Mutex::new(DBState {
-        kv_store: HashMap::new(),
-        storage,
-    }));
+    let reader = BufReader::new(storage.try_clone().unwrap());
+
+    let mut kv_store = HashMap::new();
+
+    for line in reader.lines() {
+        if let Ok(line) = line {
+            let mut results = line.split(30 as char);
+
+            kv_store.insert(
+                results.next().unwrap().to_string(),
+                results.next().unwrap().to_string(),
+            );
+        }
+    }
+
+    let db_state = Arc::new(Mutex::new(DBState { kv_store, storage }));
 
     let db = Router::new()
         .route("/set", routing::get(set))
         .route("/get", routing::get(get))
-        .with_state(db_state);
+        .with_state(db_state.clone());
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8000").await.unwrap();
 
@@ -40,6 +52,24 @@ async fn main() {
         .with_graceful_shutdown(shutdown_signal())
         .await
         .unwrap();
+
+    let db_state = db_state.lock().unwrap();
+
+    let mut storage_file = File::create("db.dat.new").unwrap();
+
+    for (key, value) in db_state.kv_store.iter() {
+        storage_file.write(key.as_bytes()).unwrap();
+        storage_file.write(&[30]).unwrap();
+        storage_file.write(value.as_bytes()).unwrap();
+        storage_file.write("\n".as_bytes()).unwrap();
+    }
+
+    drop(storage_file);
+    drop(db_state);
+
+    std::fs::rename("db.dat", "db.dat.old").unwrap();
+    std::fs::rename("db.dat.new", "db.dat").unwrap();
+    std::fs::remove_file("db.dat.old").unwrap();
 
     println!("server stopped");
 }
