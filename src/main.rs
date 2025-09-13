@@ -4,19 +4,31 @@ use axum::{
     http::StatusCode,
     routing,
 };
-use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::Mutex;
+use std::{collections::HashMap, fs::File, path::Path};
+use std::{io::Write, sync::Arc};
 
 struct DBState {
     kv_store: HashMap<String, String>,
+    storage: File,
 }
 
 #[tokio::main]
 async fn main() {
+    let storage_path = Path::new("db.dat");
+
+    let storage = File::options()
+        .read(true)
+        .append(true)
+        .create(true)
+        .open(storage_path)
+        .unwrap();
+
     let db_state = Arc::new(Mutex::new(DBState {
         kv_store: HashMap::new(),
+        storage,
     }));
+
     let db = Router::new()
         .route("/set", routing::get(set))
         .route("/get", routing::get(get))
@@ -69,7 +81,13 @@ async fn set(
 
     for (key, value) in params {
         let mut db_state = db_state.lock().unwrap();
-        db_state.kv_store.insert(key, value.clone());
+        db_state.kv_store.insert(key.clone(), value.clone());
+
+        db_state.storage.write(key.as_bytes()).unwrap();
+        db_state.storage.write(&[30]).unwrap();
+        db_state.storage.write(value.as_bytes()).unwrap();
+        db_state.storage.write("\n".as_bytes()).unwrap();
+
         return StatusCode::OK;
     }
 
